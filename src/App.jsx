@@ -518,7 +518,7 @@ function App() {
 
         <div className="app-header-right">
           <a
-            href="https://energy-verse-portal.netlify.app/?feature=8"
+            href="https://energy-verse-portal.netlify.app/?feature=7"
             className="btn-back-to-portal"
             target="_self"
           >
