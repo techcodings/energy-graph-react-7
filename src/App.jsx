@@ -76,7 +76,7 @@ function cosineSim(a, b) {
   return dot(a, b) / (na * nb);
 }
 
-// ---------------------- React App ----------------------
+// ---------------------- Demo Data ----------------------
 
 const DEMO_PAPERS = [
   {
@@ -84,7 +84,7 @@ const DEMO_PAPERS = [
     title: "Cascading failures in power grids with high renewable penetration",
     summary:
       "This paper studies how increased wind and solar generation can change the propagation of disturbances and cause cascading outages.",
-    published: "2021-03-15T00:00:00Z",
+    published: "2021-03-15",
   },
 ];
 
@@ -94,8 +94,8 @@ const DEMO_EVENTS = [
     name: "2021 monsoon storm blackout",
     description:
       "Widespread outages in the coastal region due to transmission tower failure and flooding.",
-    start_time: "2021-07-12T02:00:00Z",
-    end_time: "2021-07-12T10:00:00Z",
+    start_time: "2021-07-12T02:00",
+    end_time: "2021-07-12T10:00",
     region: "Tamil Nadu",
     asset_type: "Transmission",
     severity: 0.9,
@@ -115,6 +115,8 @@ const DEMO_POLICIES = [
   },
 ];
 
+// ---------------------- React App ----------------------
+
 function App() {
   const [nodesMap, setNodesMap] = useState({});
   const [edges, setEdges] = useState([]);
@@ -123,8 +125,11 @@ function App() {
   const [error, setError] = useState("");
   const [loadingIngest, setLoadingIngest] = useState(false);
 
-  // Tab state for the ingest card
+  // --- Data State (Now Objects, not JSON strings) ---
   const [activeTab, setActiveTab] = useState("papers");
+  const [papers, setPapers] = useState(DEMO_PAPERS);
+  const [events, setEvents] = useState(DEMO_EVENTS);
+  const [policies, setPolicies] = useState(DEMO_POLICIES);
 
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [selectedNodeSummary, setSelectedNodeSummary] = useState("");
@@ -137,15 +142,79 @@ function App() {
   const [ragContexts, setRagContexts] = useState([]);
   const [loadingRag, setLoadingRag] = useState(false);
 
-  const [papersJson, setPapersJson] = useState(
-    JSON.stringify(DEMO_PAPERS, null, 2)
-  );
-  const [eventsJson, setEventsJson] = useState(
-    JSON.stringify(DEMO_EVENTS, null, 2)
-  );
-  const [policiesJson, setPoliciesJson] = useState(
-    JSON.stringify(DEMO_POLICIES, null, 2)
-  );
+  // ---------- Data Management Handlers ----------
+
+  const resetToDemoData = () => {
+    if (window.confirm("Discard changes and reset to default demo data?")) {
+      setPapers(DEMO_PAPERS);
+      setEvents(DEMO_EVENTS);
+      setPolicies(DEMO_POLICIES);
+      setError("");
+    }
+  };
+
+  const updateItem = (category, index, field, value) => {
+    if (category === "papers") {
+      const newArr = [...papers];
+      newArr[index] = { ...newArr[index], [field]: value };
+      setPapers(newArr);
+    } else if (category === "events") {
+      const newArr = [...events];
+      newArr[index] = { ...newArr[index], [field]: value };
+      setEvents(newArr);
+    } else if (category === "policies") {
+      const newArr = [...policies];
+      newArr[index] = { ...newArr[index], [field]: value };
+      setPolicies(newArr);
+    }
+  };
+
+  const addItem = (category) => {
+    const id = Math.random().toString(36).substr(2, 9);
+    if (category === "papers") {
+      setPapers([
+        ...papers,
+        { id: `paper_${id}`, title: "", summary: "", published: "" },
+      ]);
+    } else if (category === "events") {
+      setEvents([
+        ...events,
+        {
+          external_id: `evt_${id}`,
+          name: "",
+          description: "",
+          region: "",
+          asset_type: "",
+          severity: 0.5,
+          start_time: "",
+          end_time: "",
+        },
+      ]);
+    } else if (category === "policies") {
+      setPolicies([
+        ...policies,
+        {
+          external_id: `pol_${id}`,
+          name: "",
+          description: "",
+          jurisdiction: "",
+          category: "",
+          start_date: "",
+          end_date: "",
+        },
+      ]);
+    }
+  };
+
+  const deleteItem = (category, index) => {
+    if (category === "papers") {
+      setPapers(papers.filter((_, i) => i !== index));
+    } else if (category === "events") {
+      setEvents(events.filter((_, i) => i !== index));
+    } else if (category === "policies") {
+      setPolicies(policies.filter((_, i) => i !== index));
+    }
+  };
 
   // ---------- graph helpers ----------
 
@@ -176,29 +245,6 @@ function App() {
 
   // ---------- ingestion ----------
 
-  const resetToDemoData = () => {
-    if (window.confirm("Replace current inputs with default demo data?")) {
-      setPapersJson(JSON.stringify(DEMO_PAPERS, null, 2));
-      setEventsJson(JSON.stringify(DEMO_EVENTS, null, 2));
-      setPoliciesJson(JSON.stringify(DEMO_POLICIES, null, 2));
-      setError("");
-    }
-  };
-
-  const formatJson = (type) => {
-    try {
-      if (type === "papers") {
-        setPapersJson(JSON.stringify(JSON.parse(papersJson), null, 2));
-      } else if (type === "events") {
-        setEventsJson(JSON.stringify(JSON.parse(eventsJson), null, 2));
-      } else if (type === "policies") {
-        setPoliciesJson(JSON.stringify(JSON.parse(policiesJson), null, 2));
-      }
-    } catch (e) {
-      alert("Invalid JSON. Please check your syntax.");
-    }
-  };
-
   const ingestAll = async () => {
     if (!OPENAI_API_KEY) {
       setError(
@@ -211,27 +257,14 @@ function App() {
     try {
       resetGraph();
 
-      let papers = [];
-      let events = [];
-      let policies = [];
-      try {
-        papers = JSON.parse(papersJson);
-      } catch {
-        throw new Error("Papers JSON is invalid.");
-      }
-      try {
-        events = JSON.parse(eventsJson);
-      } catch {
-        throw new Error("Events JSON is invalid.");
-      }
-      try {
-        policies = JSON.parse(policiesJson);
-      } catch {
-        throw new Error("Policies JSON is invalid.");
-      }
+      // No JSON.parse needed, we use state directly!
+      const paperList = papers;
+      const eventList = events;
+      const policyList = policies;
 
       // papers
-      for (const p of papers) {
+      for (const p of paperList) {
+        if (!p.title) continue; // skip empty
         const text = `${p.title} - ${p.summary}`;
         const emb = await getEmbedding(text);
         addNode(
@@ -247,7 +280,8 @@ function App() {
       }
 
       // events
-      for (const e of events) {
+      for (const e of eventList) {
+        if (!e.name) continue;
         const text = `${e.name}. ${e.description}. Region: ${
           e.region || "unknown"
         }. Asset: ${e.asset_type || "unknown"}.`;
@@ -263,7 +297,7 @@ function App() {
             end_time: e.end_time,
             region: e.region,
             asset_type: e.asset_type,
-            severity: e.severity ?? 0.5,
+            severity: parseFloat(e.severity ?? 0.5),
           },
           emb
         );
@@ -275,7 +309,8 @@ function App() {
       }
 
       // policies
-      for (const p of policies) {
+      for (const p of policyList) {
+        if (!p.name) continue;
         const text = `${p.name}. ${p.description}. Jurisdiction: ${
           p.jurisdiction || "unknown"
         }.`;
@@ -302,9 +337,9 @@ function App() {
       }
 
       // simple keyword-based link
-      for (const p of papers) {
+      for (const p of paperList) {
         const pid = `paper:${p.id}`;
-        for (const e of events) {
+        for (const e of eventList) {
           const eid = `event:${e.external_id}`;
           const lowerTitle = (p.title || "").toLowerCase();
           const lowerDesc = (e.description || "").toLowerCase();
@@ -518,42 +553,215 @@ function App() {
 
   const nodeCount = Object.keys(nodesMap).length;
 
-  // ---------- render ----------
+  // ---------- render form helper ----------
 
-  const renderActiveTabInput = () => {
-    switch (activeTab) {
-      case "papers":
-        return (
-          <textarea
-            className="code-input"
-            value={papersJson}
-            onChange={(e) => setPapersJson(e.target.value)}
-            placeholder="Array of paper objects..."
-            style={{ height: "300px", fontFamily: "monospace" }}
-          />
-        );
-      case "events":
-        return (
-          <textarea
-            className="code-input"
-            value={eventsJson}
-            onChange={(e) => setEventsJson(e.target.value)}
-            placeholder="Array of event objects..."
-            style={{ height: "300px", fontFamily: "monospace" }}
-          />
-        );
-      case "policies":
-        return (
-          <textarea
-            className="code-input"
-            value={policiesJson}
-            onChange={(e) => setPoliciesJson(e.target.value)}
-            placeholder="Array of policy objects..."
-            style={{ height: "300px", fontFamily: "monospace" }}
-          />
-        );
-      default:
-        return null;
+  const renderFormContent = () => {
+    if (activeTab === "papers") {
+      return (
+        <div className="form-list">
+          {papers.map((item, idx) => (
+            <div key={idx} className="form-item-card">
+              <div className="form-row-split">
+                <input
+                  type="text"
+                  placeholder="Paper Title"
+                  value={item.title}
+                  onChange={(e) =>
+                    updateItem("papers", idx, "title", e.target.value)
+                  }
+                  className="input-base"
+                />
+                <input
+                  type="date"
+                  value={item.published}
+                  onChange={(e) =>
+                    updateItem("papers", idx, "published", e.target.value)
+                  }
+                  className="input-base input-date"
+                />
+              </div>
+              <textarea
+                placeholder="Paper Abstract/Summary"
+                value={item.summary}
+                onChange={(e) =>
+                  updateItem("papers", idx, "summary", e.target.value)
+                }
+                className="input-base input-area"
+              />
+              <button
+                className="btn-delete"
+                onClick={() => deleteItem("papers", idx)}
+              >
+                Remove Paper
+              </button>
+            </div>
+          ))}
+          <button className="btn-add" onClick={() => addItem("papers")}>
+            + Add Paper
+          </button>
+        </div>
+      );
+    }
+
+    if (activeTab === "events") {
+      return (
+        <div className="form-list">
+          {events.map((item, idx) => (
+            <div key={idx} className="form-item-card">
+              <input
+                type="text"
+                placeholder="Event Name (e.g. Storm Outage)"
+                value={item.name}
+                onChange={(e) =>
+                  updateItem("events", idx, "name", e.target.value)
+                }
+                className="input-base"
+                style={{ fontWeight: "bold" }}
+              />
+              <textarea
+                placeholder="Description of what happened..."
+                value={item.description}
+                onChange={(e) =>
+                  updateItem("events", idx, "description", e.target.value)
+                }
+                className="input-base input-area"
+              />
+              <div className="form-row-split">
+                <input
+                  type="text"
+                  placeholder="Region (e.g. Texas)"
+                  value={item.region}
+                  onChange={(e) =>
+                    updateItem("events", idx, "region", e.target.value)
+                  }
+                  className="input-base"
+                />
+                <input
+                  type="text"
+                  placeholder="Asset (e.g. Grid)"
+                  value={item.asset_type}
+                  onChange={(e) =>
+                    updateItem("events", idx, "asset_type", e.target.value)
+                  }
+                  className="input-base"
+                />
+              </div>
+              <div className="form-row-split">
+                <div style={{ flex: 1 }}>
+                  <label className="label-mini">Start Time</label>
+                  <input
+                    type="datetime-local"
+                    value={item.start_time}
+                    onChange={(e) =>
+                      updateItem("events", idx, "start_time", e.target.value)
+                    }
+                    className="input-base"
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label className="label-mini">Severity (0-1)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="1"
+                    value={item.severity}
+                    onChange={(e) =>
+                      updateItem("events", idx, "severity", e.target.value)
+                    }
+                    className="input-base"
+                  />
+                </div>
+              </div>
+              <button
+                className="btn-delete"
+                onClick={() => deleteItem("events", idx)}
+              >
+                Remove Event
+              </button>
+            </div>
+          ))}
+          <button className="btn-add" onClick={() => addItem("events")}>
+            + Add Event
+          </button>
+        </div>
+      );
+    }
+
+    if (activeTab === "policies") {
+      return (
+        <div className="form-list">
+          {policies.map((item, idx) => (
+            <div key={idx} className="form-item-card">
+              <input
+                type="text"
+                placeholder="Policy Name"
+                value={item.name}
+                onChange={(e) =>
+                  updateItem("policies", idx, "name", e.target.value)
+                }
+                className="input-base"
+                style={{ fontWeight: "bold" }}
+              />
+              <textarea
+                placeholder="Policy Details..."
+                value={item.description}
+                onChange={(e) =>
+                  updateItem("policies", idx, "description", e.target.value)
+                }
+                className="input-base input-area"
+              />
+              <div className="form-row-split">
+                <input
+                  type="text"
+                  placeholder="Jurisdiction (e.g. USA)"
+                  value={item.jurisdiction}
+                  onChange={(e) =>
+                    updateItem("policies", idx, "jurisdiction", e.target.value)
+                  }
+                  className="input-base"
+                />
+                <input
+                  type="text"
+                  placeholder="Category (e.g. Subsidy)"
+                  value={item.category}
+                  onChange={(e) =>
+                    updateItem("policies", idx, "category", e.target.value)
+                  }
+                  className="input-base"
+                />
+              </div>
+              <div className="form-row-split">
+                <input
+                  type="date"
+                  value={item.start_date}
+                  onChange={(e) =>
+                    updateItem("policies", idx, "start_date", e.target.value)
+                  }
+                  className="input-base"
+                />
+                 <input
+                  type="date"
+                  value={item.end_date}
+                  onChange={(e) =>
+                    updateItem("policies", idx, "end_date", e.target.value)
+                  }
+                  className="input-base"
+                />
+              </div>
+              <button
+                className="btn-delete"
+                onClick={() => deleteItem("policies", idx)}
+              >
+                Remove Policy
+              </button>
+            </div>
+          ))}
+          <button className="btn-add" onClick={() => addItem("policies")}>
+            + Add Policy
+          </button>
+        </div>
+      );
     }
   };
 
@@ -562,7 +770,9 @@ function App() {
       <header className="app-header">
         <div className="app-header-left">
           <div className="app-kicker">ENERGYVERSE · GRAPH RAG STUDIO</div>
-          <div className="app-header-title">Knowledge Graph of Energy Events</div>
+          <div className="app-header-title">
+            Knowledge Graph of Energy Events
+          </div>
           <div className="app-header-sub">
             Client-side knowledge graph, embeddings and RAG — powered directly
             from this React component.
@@ -580,7 +790,11 @@ function App() {
           <span className="badge">
             Nodes: {nodeCount} · Edges: {edges.length}
           </span>
-          <button onClick={ingestAll} disabled={loadingIngest} className="primary-btn">
+          <button
+            onClick={ingestAll}
+            disabled={loadingIngest}
+            className="primary-btn"
+          >
             {loadingIngest ? "Ingesting..." : "Ingest / Rebuild Graph"}
           </button>
         </div>
@@ -642,7 +856,11 @@ function App() {
                     ctx.textAlign = "center";
                     ctx.textBaseline = "top";
                     ctx.fillStyle = "#e5e7eb";
-                    ctx.fillText(label.slice(0, 22), node.x, node.y + radius + 2);
+                    ctx.fillText(
+                      label.slice(0, 22),
+                      node.x,
+                      node.y + radius + 2
+                    );
                   }}
                   linkDirectionalArrowLength={4}
                   linkDirectionalArrowRelPos={1}
@@ -656,21 +874,28 @@ function App() {
           </div>
 
           <div className="card">
-            <div className="card-header" style={{ justifyContent: "space-between" }}>
+            <div
+              className="card-header"
+              style={{ justifyContent: "space-between" }}
+            >
               <div>
                 <div className="card-title">Ingest Data</div>
                 <div className="card-subtitle">
-                  Edit the JSON below to add data to the graph.
+                  Add items below, then click Ingest to build graph.
                 </div>
               </div>
-              <button 
-                onClick={resetToDemoData} 
-                style={{ fontSize: "0.75rem", padding: "4px 8px", background: "#334155" }}
+              <button
+                onClick={resetToDemoData}
+                style={{
+                  fontSize: "0.75rem",
+                  padding: "4px 8px",
+                  background: "#334155",
+                }}
               >
                 Reset Default Data
               </button>
             </div>
-            
+
             {/* Custom Tabs UI */}
             <div style={{ display: "flex", borderBottom: "1px solid #334155" }}>
               {["papers", "events", "policies"].map((tab) => (
@@ -681,12 +906,15 @@ function App() {
                     background: activeTab === tab ? "#1e293b" : "transparent",
                     color: activeTab === tab ? "#fff" : "#94a3b8",
                     border: "none",
-                    borderBottom: activeTab === tab ? "2px solid #3b82f6" : "2px solid transparent",
+                    borderBottom:
+                      activeTab === tab
+                        ? "2px solid #3b82f6"
+                        : "2px solid transparent",
                     padding: "10px 16px",
                     cursor: "pointer",
                     textTransform: "capitalize",
                     fontWeight: 500,
-                    outline: "none"
+                    outline: "none",
                   }}
                 >
                   {tab}
@@ -694,23 +922,8 @@ function App() {
               ))}
             </div>
 
-            <div className="card-body" style={{ paddingTop: "0" }}>
-              <div className="field-row" style={{ display: "block", marginTop: "10px" }}>
-                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px" }}>
-                    <div className="label" style={{ textTransform: "capitalize" }}>{activeTab} JSON</div>
-                    <div 
-                      className="small-muted" 
-                      style={{ cursor: "pointer", color: "#3b82f6" }} 
-                      onClick={() => formatJson(activeTab)}
-                    >
-                      Format / Validate JSON
-                    </div>
-                 </div>
-                 {renderActiveTabInput()}
-              </div>
-              <div className="small-muted" style={{ marginTop: "8px" }}>
-                Switch tabs to edit other data types. Click &quot;Ingest / Rebuild Graph&quot; above when ready.
-              </div>
+            <div className="card-body" style={{ padding: "1rem" }}>
+              {renderFormContent()}
             </div>
           </div>
         </section>
@@ -863,6 +1076,72 @@ function App() {
           </div>
         </section>
       </main>
+
+      {/* Basic Styles for the new Form UI */}
+      <style>{`
+        .form-list {
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+        .form-item-card {
+          background: #0f172a;
+          border: 1px solid #334155;
+          padding: 1rem;
+          border-radius: 6px;
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+        .form-row-split {
+          display: flex;
+          gap: 0.5rem;
+        }
+        .input-base {
+          background: #1e293b;
+          border: 1px solid #475569;
+          color: #e2e8f0;
+          padding: 6px 10px;
+          border-radius: 4px;
+          font-size: 0.9rem;
+          flex: 1;
+        }
+        .input-area {
+          resize: vertical;
+          min-height: 60px;
+        }
+        .label-mini {
+          font-size: 0.75rem;
+          color: #94a3b8;
+          display: block;
+          margin-bottom: 2px;
+        }
+        .btn-delete {
+          align-self: flex-end;
+          background: transparent;
+          color: #f87171;
+          border: 1px solid #7f1d1d;
+          font-size: 0.75rem;
+          padding: 2px 8px;
+          border-radius: 4px;
+          cursor: pointer;
+        }
+        .btn-delete:hover {
+          background: #450a0a;
+        }
+        .btn-add {
+          background: #334155;
+          color: white;
+          border: 1px dashed #64748b;
+          padding: 10px;
+          border-radius: 6px;
+          cursor: pointer;
+          font-weight: 500;
+        }
+        .btn-add:hover {
+          background: #475569;
+        }
+      `}</style>
     </div>
   );
 }
