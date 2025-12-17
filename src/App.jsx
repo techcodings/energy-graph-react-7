@@ -11,12 +11,12 @@ async function getEmbedding(text) {
     method: "POST",
     headers: {
       Authorization: `Bearer ${OPENAI_API_KEY}`,
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       model: "text-embedding-3-small",
-      input: clean
-    })
+      input: clean,
+    }),
   });
   if (!resp.ok) {
     const errText = await resp.text();
@@ -31,7 +31,7 @@ async function gptPlainText(prompt) {
     method: "POST",
     headers: {
       Authorization: `Bearer ${OPENAI_API_KEY}`,
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       model: "gpt-4o-mini",
@@ -41,10 +41,10 @@ async function gptPlainText(prompt) {
       input: [
         {
           role: "user",
-          content: [{ type: "input_text", text: prompt }]
-        }
-      ]
-    })
+          content: [{ type: "input_text", text: prompt }],
+        },
+      ],
+    }),
   });
   if (!resp.ok) {
     const errText = await resp.text();
@@ -78,6 +78,43 @@ function cosineSim(a, b) {
 
 // ---------------------- React App ----------------------
 
+const DEMO_PAPERS = [
+  {
+    id: "arxiv_demo_1",
+    title: "Cascading failures in power grids with high renewable penetration",
+    summary:
+      "This paper studies how increased wind and solar generation can change the propagation of disturbances and cause cascading outages.",
+    published: "2021-03-15T00:00:00Z",
+  },
+];
+
+const DEMO_EVENTS = [
+  {
+    external_id: "event_demo_1",
+    name: "2021 monsoon storm blackout",
+    description:
+      "Widespread outages in the coastal region due to transmission tower failure and flooding.",
+    start_time: "2021-07-12T02:00:00Z",
+    end_time: "2021-07-12T10:00:00Z",
+    region: "Tamil Nadu",
+    asset_type: "Transmission",
+    severity: 0.9,
+  },
+];
+
+const DEMO_POLICIES = [
+  {
+    external_id: "policy_demo_1",
+    name: "Solar rooftop subsidy phase II",
+    description:
+      "Capital subsidy for residential rooftop PV with performance-based incentives for high performance.",
+    jurisdiction: "India",
+    start_date: "2020-01-01",
+    end_date: "2025-12-31",
+    category: "Subsidy",
+  },
+];
+
 function App() {
   const [nodesMap, setNodesMap] = useState({});
   const [edges, setEdges] = useState([]);
@@ -85,6 +122,9 @@ function App() {
 
   const [error, setError] = useState("");
   const [loadingIngest, setLoadingIngest] = useState(false);
+
+  // Tab state for the ingest card
+  const [activeTab, setActiveTab] = useState("papers");
 
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [selectedNodeSummary, setSelectedNodeSummary] = useState("");
@@ -98,58 +138,13 @@ function App() {
   const [loadingRag, setLoadingRag] = useState(false);
 
   const [papersJson, setPapersJson] = useState(
-    JSON.stringify(
-      [
-        {
-          id: "arxiv_demo_1",
-          title: "Cascading failures in power grids with high renewable penetration",
-          summary:
-            "This paper studies how increased wind and solar generation can change the propagation of disturbances and cause cascading outages.",
-          published: "2021-03-15T00:00:00Z"
-        }
-      ],
-      null,
-      2
-    )
+    JSON.stringify(DEMO_PAPERS, null, 2)
   );
-
   const [eventsJson, setEventsJson] = useState(
-    JSON.stringify(
-      [
-        {
-          external_id: "event_demo_1",
-          name: "2021 monsoon storm blackout",
-          description:
-            "Widespread outages in the coastal region due to transmission tower failure and flooding.",
-          start_time: "2021-07-12T02:00:00Z",
-          end_time: "2021-07-12T10:00:00Z",
-          region: "Tamil Nadu",
-          asset_type: "Transmission",
-          severity: 0.9
-        }
-      ],
-      null,
-      2
-    )
+    JSON.stringify(DEMO_EVENTS, null, 2)
   );
-
   const [policiesJson, setPoliciesJson] = useState(
-    JSON.stringify(
-      [
-        {
-          external_id: "policy_demo_1",
-          name: "Solar rooftop subsidy phase II",
-          description:
-            "Capital subsidy for residential rooftop PV with performance-based incentives for high performance.",
-          jurisdiction: "India",
-          start_date: "2020-01-01",
-          end_date: "2025-12-31",
-          category: "Subsidy"
-        }
-      ],
-      null,
-      2
-    )
+    JSON.stringify(DEMO_POLICIES, null, 2)
   );
 
   // ---------- graph helpers ----------
@@ -180,6 +175,29 @@ function App() {
   };
 
   // ---------- ingestion ----------
+
+  const resetToDemoData = () => {
+    if (window.confirm("Replace current inputs with default demo data?")) {
+      setPapersJson(JSON.stringify(DEMO_PAPERS, null, 2));
+      setEventsJson(JSON.stringify(DEMO_EVENTS, null, 2));
+      setPoliciesJson(JSON.stringify(DEMO_POLICIES, null, 2));
+      setError("");
+    }
+  };
+
+  const formatJson = (type) => {
+    try {
+      if (type === "papers") {
+        setPapersJson(JSON.stringify(JSON.parse(papersJson), null, 2));
+      } else if (type === "events") {
+        setEventsJson(JSON.stringify(JSON.parse(eventsJson), null, 2));
+      } else if (type === "policies") {
+        setPoliciesJson(JSON.stringify(JSON.parse(policiesJson), null, 2));
+      }
+    } catch (e) {
+      alert("Invalid JSON. Please check your syntax.");
+    }
+  };
 
   const ingestAll = async () => {
     if (!OPENAI_API_KEY) {
@@ -222,7 +240,7 @@ function App() {
             type: "Paper",
             title: p.title,
             summary: p.summary,
-            published: p.published
+            published: p.published,
           },
           emb
         );
@@ -245,7 +263,7 @@ function App() {
             end_time: e.end_time,
             region: e.region,
             asset_type: e.asset_type,
-            severity: e.severity ?? 0.5
+            severity: e.severity ?? 0.5,
           },
           emb
         );
@@ -272,7 +290,7 @@ function App() {
             jurisdiction: p.jurisdiction,
             start_date: p.start_date,
             end_date: p.end_date,
-            category: p.category
+            category: p.category,
           },
           emb
         );
@@ -342,7 +360,7 @@ function App() {
         time: t,
         summary: n.summary,
         region: n.region || n.jurisdiction,
-        timestamp: d.getTime()
+        timestamp: d.getTime(),
       });
     });
     items.sort((a, b) => a.timestamp - b.timestamp);
@@ -362,7 +380,7 @@ function App() {
         region: n.region || n.jurisdiction || "",
         severity: n.severity,
         risk,
-        raw: n
+        raw: n,
       };
     });
     return { nodes, links: edges };
@@ -428,7 +446,7 @@ function App() {
     const qEmb = await getEmbedding(query);
     const scored = ids.map((id) => ({
       id,
-      score: cosineSim(qEmb, embeddingsRef.current[id])
+      score: cosineSim(qEmb, embeddingsRef.current[id]),
     }));
     scored.sort((a, b) => b.score - a.score);
     const results = [];
@@ -485,8 +503,6 @@ function App() {
     }
   };
 
-  // ---------- misc ----------
-
   const formatDate = (str) => {
     if (!str) return "";
     const d = new Date(str);
@@ -503,6 +519,43 @@ function App() {
   const nodeCount = Object.keys(nodesMap).length;
 
   // ---------- render ----------
+
+  const renderActiveTabInput = () => {
+    switch (activeTab) {
+      case "papers":
+        return (
+          <textarea
+            className="code-input"
+            value={papersJson}
+            onChange={(e) => setPapersJson(e.target.value)}
+            placeholder="Array of paper objects..."
+            style={{ height: "300px", fontFamily: "monospace" }}
+          />
+        );
+      case "events":
+        return (
+          <textarea
+            className="code-input"
+            value={eventsJson}
+            onChange={(e) => setEventsJson(e.target.value)}
+            placeholder="Array of event objects..."
+            style={{ height: "300px", fontFamily: "monospace" }}
+          />
+        );
+      case "policies":
+        return (
+          <textarea
+            className="code-input"
+            value={policiesJson}
+            onChange={(e) => setPoliciesJson(e.target.value)}
+            placeholder="Array of policy objects..."
+            style={{ height: "300px", fontFamily: "monospace" }}
+          />
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="app-root">
@@ -527,7 +580,7 @@ function App() {
           <span className="badge">
             Nodes: {nodeCount} · Edges: {edges.length}
           </span>
-          <button onClick={ingestAll} disabled={loadingIngest}>
+          <button onClick={ingestAll} disabled={loadingIngest} className="primary-btn">
             {loadingIngest ? "Ingesting..." : "Ingest / Rebuild Graph"}
           </button>
         </div>
@@ -603,44 +656,60 @@ function App() {
           </div>
 
           <div className="card">
-            <div className="card-header">
+            <div className="card-header" style={{ justifyContent: "space-between" }}>
               <div>
-                <div className="card-title">Ingest data into the graph</div>
+                <div className="card-title">Ingest Data</div>
                 <div className="card-subtitle">
-                  Paste research papers, grid events and policy JSON.
+                  Edit the JSON below to add data to the graph.
                 </div>
               </div>
+              <button 
+                onClick={resetToDemoData} 
+                style={{ fontSize: "0.75rem", padding: "4px 8px", background: "#334155" }}
+              >
+                Reset Default Data
+              </button>
             </div>
-            <div className="card-body">
-              <div className="field-row">
-                <div style={{ flex: 1 }}>
-                  <div className="label">Papers JSON</div>
-                  <textarea
-                    value={papersJson}
-                    onChange={(e) => setPapersJson(e.target.value)}
-                  />
-                </div>
+            
+            {/* Custom Tabs UI */}
+            <div style={{ display: "flex", borderBottom: "1px solid #334155" }}>
+              {["papers", "events", "policies"].map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  style={{
+                    background: activeTab === tab ? "#1e293b" : "transparent",
+                    color: activeTab === tab ? "#fff" : "#94a3b8",
+                    border: "none",
+                    borderBottom: activeTab === tab ? "2px solid #3b82f6" : "2px solid transparent",
+                    padding: "10px 16px",
+                    cursor: "pointer",
+                    textTransform: "capitalize",
+                    fontWeight: 500,
+                    outline: "none"
+                  }}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+
+            <div className="card-body" style={{ paddingTop: "0" }}>
+              <div className="field-row" style={{ display: "block", marginTop: "10px" }}>
+                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px" }}>
+                    <div className="label" style={{ textTransform: "capitalize" }}>{activeTab} JSON</div>
+                    <div 
+                      className="small-muted" 
+                      style={{ cursor: "pointer", color: "#3b82f6" }} 
+                      onClick={() => formatJson(activeTab)}
+                    >
+                      Format / Validate JSON
+                    </div>
+                 </div>
+                 {renderActiveTabInput()}
               </div>
-              <div className="field-row">
-                <div style={{ flex: 1 }}>
-                  <div className="label">Grid events JSON</div>
-                  <textarea
-                    value={eventsJson}
-                    onChange={(e) => setEventsJson(e.target.value)}
-                  />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div className="label">Policies JSON</div>
-                  <textarea
-                    value={policiesJson}
-                    onChange={(e) => setPoliciesJson(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="small-muted">
-                The component calls OpenAI for embeddings directly from the
-                browser. Don&apos;t ship this pattern to production with a real
-                secret key.
+              <div className="small-muted" style={{ marginTop: "8px" }}>
+                Switch tabs to edit other data types. Click &quot;Ingest / Rebuild Graph&quot; above when ready.
               </div>
             </div>
           </div>
